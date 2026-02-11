@@ -1,35 +1,8 @@
+import streamlit as st
 import numpy as np
+import matplotlib.pyplot as plt
 
 
-n = 500
-T = 500
-md = 10
-mo = 10
-epsilon = 0.01
-rev = 0.1
-mu_v = 0.8
-gamma = 0.5
-lam = 0.1  # lambda in Python ist reserviert, deshalb 'lam'
-rad_km_2023 = 90.4
-
-# --- Set data ---
-mu_B = 0.01
-mu_PNB = 0.6029
-mu_NE = 0.4412
-
-mu = np.array([mu_B, mu_PNB, mu_NE])
-
-# Initial behaviors (x0) with 1% randomly set to 1
-x0 = np.zeros(n)
-num_infected = round(0.01 * n)
-x0[np.random.permutation(n)[:num_infected]] = 1
-
-# Convictions
-z = 0.8 * np.ones(n)
-
-# Initial normative expectations
-# y0 = 0.4412 * np.ones(n)  # optional alternative
-y0 = 0.8 * np.ones(n)
 
 def ADN2l(n, m1, m2, a=None, x=None, mu=None):
 
@@ -155,3 +128,106 @@ def ABM(n, md, mo, beta, gamma, lam, alpha, epsilon,
         )
 
     return x, y, z
+
+
+
+
+# --- App Titel ---
+st.title("Agent-Based Model Simulation")
+
+# --- Slider für beta ---
+beta_adaption = st.slider(
+    "Kommunikationskampagne (0-100)",
+    min_value=0,
+    max_value=100,
+    value=50
+)
+beta = 0 + (0.8 / 100) * beta_adaption
+
+# --- Eingabefeld für alpha ---
+rad_km_2026 = st.number_input(
+    "Fahrradwege in 2026 (km)",
+    min_value=0.0,
+    max_value=500.0,
+    value=90.4
+)
+alpha = 0.9 - (rad_km_2026 / 1000)
+
+# --- ABM-Parameter ---
+n = 500
+T = 500
+md = 10
+mo = 10
+epsilon = 0.01
+rev = 0.1
+mu_v = 0.8
+gamma = 0.5
+lam = 0.1  # lambda ist reserviert, daher lam
+mu_B = 0.01
+mu_PNB = 0.6029
+mu_NE = 0.4412
+mu = np.array([mu_B, mu_PNB, mu_NE])
+
+# Initial behaviors (1% random)
+x0 = np.zeros(n)
+num_infected = round(0.01 * n)
+x0[np.random.permutation(n)[:num_infected]] = 1
+
+# Convictions and normative expectations
+z = 0.8 * np.ones(n)
+y0 = 0.8 * np.ones(n)
+
+# --- Button to run simulation ---
+if st.button("Simulation starten"):
+    st.write("Simulation läuft...")
+
+    # --- ABM ausführen ---
+    x, y, z_out = ABM(
+        n=n, md=md, mo=mo,
+        beta=beta, gamma=gamma, lam=lam,
+        alpha=alpha, epsilon=epsilon, rev=rev,
+        x0=x0, z=z, y0=y0, mu=mu_v, T=T
+    )
+
+    st.success("Simulation abgeschlossen!")
+    # --- Fahrrad-Share am Ende ---
+    share_bike = x[:, -1].sum() / n
+    st.write(f"Einwohnende, die Fahrrad fahren: {share_bike*100:.2f} %")
+
+    # --- CO₂ Berechnung ---
+    # PKM (Personenkilometer) und Emissionsfaktoren
+    pkm_2023 = {'walk': 3670.0, 'bike': 3710.0, 'car': 44837.0, 'pp': 4156.0}
+    ef = {'bike': 8, 'car': 144.2, 'pp': 90.1, 'walk': 0}
+
+    co2_time = np.zeros(T)
+    co2_base = pkm_2023['bike']*ef['bike'] + pkm_2023['car']*ef['car'] + pkm_2023['pp']*ef['pp']
+
+    for t in range(T):
+        bike_share_t = x[:, t].sum() / n
+        new_bike_pkm = pkm_2023['bike'] * (1 + bike_share_t)
+        delta_bike_t = new_bike_pkm - pkm_2023['bike']
+        new_car_pkm = max(pkm_2023['car'] - delta_bike_t, 0)
+        new_pp_pkm = pkm_2023['pp']
+
+        co2_total_t = new_bike_pkm*ef['bike'] + new_car_pkm*ef['car'] + new_pp_pkm*ef['pp']
+        co2_time[t] = 100 * (1 - (co2_total_t / co2_base))  # in Prozent
+
+    co2_final = co2_time[-1]
+    st.write(f"CO₂ Reduktion im Vergleich zum Jahr 2023: {co2_final:.1f} %")
+
+    # --- Plot Fahrradnutzung über Zeit ---
+    fig, ax = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+
+    ax[0].plot(np.arange(1, T+1), x.sum(axis=0)/n, color='blue', linewidth=2)
+    ax[0].set_title("Fahrradnutzung über Zeit")
+    ax[0].set_ylabel("Anteil Fahrradfahrer")
+    ax[0].grid(True)
+
+    # --- Plot CO₂ Reduktion über Zeit ---
+    ax[1].plot(np.arange(1, T+1), co2_time, color='green', linewidth=2)
+    ax[1].set_title("CO₂-Reduktion (% im Vergleich zu 2023)")
+    ax[1].set_xlabel("Zeit")
+    ax[1].set_ylabel("CO₂ [%]")
+    ax[1].grid(True)
+
+    st.pyplot(fig)
