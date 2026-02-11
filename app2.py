@@ -1,5 +1,36 @@
 import numpy as np
 
+
+n = 500
+T = 500
+md = 10
+mo = 10
+epsilon = 0.01
+rev = 0.1
+mu_v = 0.8
+gamma = 0.5
+lam = 0.1  # lambda in Python ist reserviert, deshalb 'lam'
+rad_km_2023 = 90.4
+
+# --- Set data ---
+mu_B = 0.01
+mu_PNB = 0.6029
+mu_NE = 0.4412
+
+mu = np.array([mu_B, mu_PNB, mu_NE])
+
+# Initial behaviors (x0) with 1% randomly set to 1
+x0 = np.zeros(n)
+num_infected = round(0.01 * n)
+x0[np.random.permutation(n)[:num_infected]] = 1
+
+# Convictions
+z = 0.8 * np.ones(n)
+
+# Initial normative expectations
+# y0 = 0.4412 * np.ones(n)  # optional alternative
+y0 = 0.8 * np.ones(n)
+
 def ADN2l(n, m1, m2, a=None, x=None, mu=None):
 
     # Convert m1, m2 to vectors if scalars
